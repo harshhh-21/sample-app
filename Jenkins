@@ -1,0 +1,87 @@
+pipeline {
+  agent any
+  environment {
+    AWS_REGION = 'us-east-1'         // change as needed
+    AWS_ACCOUNT = '245369160312'     // your AWS account ID
+    ECR_REPO = 'sample-ci-app'       // name of ECR repo
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+    // full URI, including account and region
+    REPO_URI = "${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        script {
+          // Build the Docker image (uses Dockerfile in root)
+          def img = docker.build("${ECR_REPO}:${IMAGE_TAG}")
+          // capture it in variable for next stage
+          env.BUILT_IMAGE = img.imageName()
+        }
+      }
+    }
+
+    stage('Login to ECR & Push') {
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'my-aws',
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          script {
+            // Login to ECR
+            sh """
+              aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+              aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+              aws configure set default.region ${AWS_REGION}
+
+              aws ecr get-login-password --region ${AWS_REGION} | \
+                docker login --username AWS --password-stdin ${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+              docker tag ${ECR_REPO}:${IMAGE_TAG} ${REPO_URI}:${IMAGE_TAG}
+              docker push ${REPO_URI}:${IMAGE_TAG}
+              docker push ${REPO_URI}:latest
+            """
+          }
+        }
+      }
+    }
+
+    stage('Deploy to ECS (optional)') {
+      when {
+        expression { return false }  // set to `true` or change condition when you want deployment
+      }
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'aws-jenkins-creds',
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+            aws configure set default.region ${AWS_REGION}
+
+            # Example: update ECS service to use new image
+            aws ecs update-service --cluster myCluster --service myService \
+              --force-new-deployment
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    cleanup {
+      // remove Docker images locally to save space
+      sh "docker rmi ${REPO_URI}:${IMAGE_TAG} || true"
+      sh "docker rmi ${RECR_REPO}:${IMAGE_TAG} || true"
+    }
+  }
+}
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+          sh """
+            aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+
