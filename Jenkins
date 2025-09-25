@@ -64,7 +64,7 @@ pipeline {
             aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
             aws configure set default.region ${AWS_REGION}
 
-            # Example: update ECS service to use new image
+            / / Example: update ECS service to use new image
             aws ecs update-service --cluster myCluster --service myService \
               --force-new-deployment
           """
