@@ -34,42 +34,47 @@ pipeline {
             usernameVariable: 'AWS_ACCESS_KEY_ID',
             passwordVariable: 'AWS_SECRET_ACCESS_KEY'
         )]) {
-          // Use triple-single-quoted block so that $ and ${} are passed to shell
-          sh '''
-            aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-            aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-            aws configure set default.region ${AWS_REGION}
+          script {
+            // Login to ECR
+            sh """
+              aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+              aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+              aws configure set default.region ${AWS_REGION}
 
-            aws ecr get-login-password --region ${AWS_REGION} | \
-              docker login --username AWS --password-stdin ${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com
+              aws ecr get-login-password --region ${AWS_REGION} | \
+                docker login --username AWS --password-stdin ${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
-            docker tag ${ECR_REPO}:${IMAGE_TAG} ${REPO_URI}:${IMAGE_TAG}
-            docker push ${REPO_URI}:${IMAGE_TAG}
-            docker push ${REPO_URI}:latest
-          '''
+              docker tag ${ECR_REPO}:${IMAGE_TAG} ${REPO_URI}:${IMAGE_TAG}
+              docker push ${REPO_URI}:${IMAGE_TAG}
+              docker push ${REPO_URI}:latest
+            """
+          }
         }
       }
     }
 
     stage('Deploy to ECS (optional)') {
       when {
-        expression { return false }  // change to true or some condition when you want deployment
+        expression { return false }  // set to `true` or change condition when you want deployment
       }
       steps {
         withCredentials([usernamePassword(
-            credentialsId: 'my-aws',
+            credentialsId: 'aws-jenkins-creds',
             usernameVariable: 'AWS_ACCESS_KEY_ID',
             passwordVariable: 'AWS_SECRET_ACCESS_KEY'
         )]) {
-          sh '''
-            aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-            aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-            aws configure set default.region ${AWS_REGION}
+          script {
+            // Login to AWS CLI
+            sh """
+              aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+              aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+              aws configure set default.region ${AWS_REGION}
 
-            # Example: update ECS service to use new image
-            aws ecs update-service --cluster myCluster --service myService \
-              --force-new-deployment
-          '''
+              // Example: update ECS service to use new image
+              aws ecs update-service --cluster myCluster --service myService \
+                --force-new-deployment
+            """
+          }
         }
       }
     }
